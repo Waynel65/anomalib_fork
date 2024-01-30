@@ -8,6 +8,7 @@ import hashlib
 import io
 import logging
 import os
+import stat
 import re
 import tarfile
 from collections.abc import Iterable
@@ -231,6 +232,13 @@ def safe_extract(tar_file: TarFile, root: Path, members: list[TarInfo]) -> None:
     """
     for member in members:
         tar_file.extract(member, root)
+
+        # Build the full path for the extracted member
+        member_path = root.joinpath(member.name)
+
+        # Change permissions to add write permission for the owner
+        # This applies to both files and directories
+        os.chmod(member_path, os.stat(member_path).st_mode | stat.S_IWUSR)
 
 
 def hash_check(file_path: Path, expected_hash: str) -> None:

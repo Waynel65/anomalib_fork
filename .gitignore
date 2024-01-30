@@ -179,3 +179,5 @@ lightning_logs/
 
 # gpr
 Ohio_Manual/
+models/
+visualization/
