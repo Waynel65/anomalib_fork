@@ -4,7 +4,7 @@ import math
 import os
 from PIL import Image
 
-ohio_dataset_path = "../Ohio_Manual/"
+ohio_dataset_path = "../../Ohio_Manual/"
 FIXED_HEIGHT = 504
 
 def load_one_Bscan_from_img(path):

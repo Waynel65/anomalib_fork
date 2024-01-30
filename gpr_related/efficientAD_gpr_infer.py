@@ -7,34 +7,33 @@ from anomalib.engine import Engine
 from torch.optim import Optimizer
 from torch.optim.adam import Adam
 from torch.utils.data import DataLoader
-from torchvision.transforms import ToPILImage
-from typing import Any
-from anomalib.data import MVTec
 
-from anomalib import TaskType
+# from anomalib.data import PredictDataset
 from anomalib.data.image.folder import Folder, FolderDataset
-from anomalib.data.utils import InputNormalizationMethod, get_transforms
+# from gpr_inference_dataset import PredictDataset
+from anomalib.engine import Engine
 from anomalib.models import EfficientAd
+from anomalib.utils.post_processing import superimpose_anomaly_map
+from anomalib.data.utils import InputNormalizationMethod, get_transforms
+from anomalib import TaskType
 
 from pathlib import Path
 
-# set dataset root path
-# DATASET_ROOT = Path.cwd() / "datasets" / "MVTec"
+
 DATASET_ROOT = Path.cwd().parent.parent / "Ohio_Manual"
 MODEL_NAME = "efficient_ad"
 MODELS_PATH = Path.cwd() / "models"
 GPR_PROC_METHOD = "gpr_window"
-# set task type
-# TASK = TaskType.SEGMENTATION
-TASK = TaskType.SEGMENTATION
+BEST_CHECKPOINT_PATH = MODELS_PATH / MODEL_NAME / "gpr_window" / "weights" / "last.ckpt"
 NUM_EPOCHS = 100
-IMAGE_SIZE = 504
-
+TASK = TaskType.SEGMENTATION
 
 
 def main():
+    # inference_dataset = PredictDataset(path=DATASET_ROOT / "Anomalies/Ohio_Section1-Scan067.png", image_size=(256, 256))
+    # inference_dataloader = DataLoader(dataset=inference_dataset)
 
-    # intialize the datamodule
+    # load the datamodule again so that we can let engine create the dataloader
     datamodule = Folder(
         root=DATASET_ROOT,
         normal_dir="Normal",
@@ -47,18 +46,6 @@ def main():
         normalization=InputNormalizationMethod.NONE,  # don't apply normalization, as we want to visualize the images
     )
     datamodule.setup()
-
-    # test if the datamodule is working
-    i, data = next(enumerate(datamodule.train_dataloader()))
-    print(data.keys(), data["image"].shape)
-
-    # Test images
-    i, data = next(enumerate(datamodule.test_dataloader()))
-    print(data.keys(), data["image"].shape, data["mask"].shape)
-
-
-    # get the model
-    model = EfficientAd(model_size="small")
 
     engine = Engine(
         logger=True,
@@ -78,16 +65,28 @@ def main():
         ],
         max_steps=70000 if MODEL_NAME == "efficient_ad" else -1,
     )
-    engine.fit(model=model, datamodule=datamodule)
+    model = EfficientAd(model_size="small")
+    predictions = engine.predict(model=model, datamodule=datamodule, ckpt_path=BEST_CHECKPOINT_PATH)[1]
 
-    # test the model
-    test_results = engine.test(
-        model=model,
-        datamodule=datamodule,
-        ckpt_path=engine.trainer.checkpoint_callback.best_model_path,
+    print(predictions.keys())
+    print(
+        f'Image Shape: {predictions["image"].shape},\n'
+        f'mask path: {predictions["mask_path"]}, \n'
+        'Anomaly Map Shape: {predictions["anomaly_maps"].shape}, \n'
+        'Predicted Mask Shape: {predictions["pred_masks"].shape}',
     )
-    print(test_results)
+
+    image_path = predictions["image_path"][1]
+    image_size = predictions["image"].shape[-2:]
+    image = np.array(Image.open(image_path).resize(image_size))
+
+    anomaly_map = predictions["anomaly_maps"][0]
+    anomaly_map = anomaly_map.cpu().numpy().squeeze()
+    plt.imshow(anomaly_map)
+    plt.savefig(f"visualization/{MODEL_NAME}_{GPR_PROC_METHOD}_anomaly_map1.png")
+
     return
 
 if __name__ == "__main__":
+    # print(Path.home())
     main()
